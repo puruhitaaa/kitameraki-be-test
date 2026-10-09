@@ -31,9 +31,12 @@ export const InsertTaskSchema = TaskSchema.extend({
 
 export type InsertTaskInput = z.input<typeof InsertTaskSchema>;
 
-export const FORBIDDEN_PATCH_KEYS: Record<string, true> = {
+export const FORBIDDEN_PATCH_KEYS: Record<string, boolean> = {
   id: true,
   organizationId: true,
+  __proto__: true,
+  constructor: true,
+  prototype: true,
   _rid: true,
   _self: true,
   _etag: true,
@@ -47,7 +50,10 @@ export const UpdateTaskSchema = z
     message: 'Update payload must contain at least one field to update',
   })
   .refine(
-    (data) => !Object.keys(data).some((key) => FORBIDDEN_PATCH_KEYS[key]),
+    (data) =>
+      !Object.keys(data).some((key) =>
+        Object.prototype.hasOwnProperty.call(FORBIDDEN_PATCH_KEYS, key),
+      ),
     {
       message: `Cannot update immutable or system keys: ${Object.keys(FORBIDDEN_PATCH_KEYS).join(', ')}`,
     },
@@ -55,4 +61,5 @@ export const UpdateTaskSchema = z
 
 export const BulkDeleteSchema = z
   .array(z.string().min(1, 'Task ID in bulk delete cannot be empty'))
-  .min(1, 'Bulk delete list cannot be empty');
+  .min(1, 'Bulk delete list cannot be empty')
+  .max(100, 'Bulk delete batch cannot exceed 100 tasks');

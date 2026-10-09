@@ -57,8 +57,9 @@ describe('BulkDeleteTasks', () => {
       deletedCount: 1,
       failedCount: 1,
     });
-    const body = res.jsonBody as { failures: Array<{ id: string }> };
+    const body = res.jsonBody as { failures: Array<{ id: string; reason: string }> };
     expect(body.failures[0].id).toBe('non-existent-b');
+    expect(body.failures[0].reason).toBe('Task not found');
   });
 
   it('rejects empty array with 400 Bad Request', async () => {
@@ -89,5 +90,49 @@ describe('BulkDeleteTasks', () => {
     expect(res.jsonBody).toMatchObject({
       error: 'Validation failed: expected a non-empty array of task IDs',
     });
+  });
+
+  it('rejects batch exceeding 100 tasks with 400 Bad Request', async () => {
+    const over100Ids = Array.from({ length: 101 }, (_, i) => `task-${i}`);
+    const req = createMockRequest({
+      method: 'DELETE',
+      query: { organizationId: 'org-bulk' },
+      body: over100Ids,
+    });
+
+    const res = await BulkDeleteTasks(req, createMockContext());
+
+    expect(res.status).toBe(400);
+    expect(res.jsonBody).toMatchObject({
+      error: 'Validation failed: expected a non-empty array of task IDs',
+    });
+  });
+
+  it('sanitizes unexpected database error messages to avoid information disclosure', async () => {
+    // Override delete on tasksContainer to throw an internal DB connection error
+    const originalItem = tasksContainer.item.bind(tasksContainer);
+    tasksContainer.item = (id: string, partitionKey: string) => {
+      const itemHandler = originalItem(id, partitionKey);
+      return {
+        ...itemHandler,
+        delete: async () => {
+          throw new Error('CosmosDB connection timeout at 10.0.4.15:443 with secret key xyz');
+        },
+      };
+    };
+
+    const req = createMockRequest({
+      method: 'DELETE',
+      query: { organizationId: 'org-bulk' },
+      body: ['b1'],
+    });
+
+    const res = await BulkDeleteTasks(req, createMockContext());
+
+    expect(res.status).toBe(200);
+    const body = res.jsonBody as { failures: Array<{ id: string; reason: string }> };
+    expect(body.failures).toHaveLength(1);
+    expect(body.failures[0].reason).toBe('Failed to delete task');
+    expect(body.failures[0].reason).not.toContain('CosmosDB connection timeout');
   });
 });

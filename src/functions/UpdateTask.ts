@@ -10,6 +10,9 @@ import {
   QueryParamError,
   requireQueryParam,
 } from '../shared/http';
+export function escapeJsonPointer(key: string): string {
+  return `/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`;
+}
 
 export async function UpdateTask(
   request: HttpRequest,
@@ -44,7 +47,7 @@ export async function UpdateTask(
   const patchOperations: PatchOperation[] = Object.entries(parseResult.data).map(
     ([key, value]) => ({
       op: 'set',
-      path: `/${key}`,
+      path: escapeJsonPointer(key),
       value,
     }),
   );
