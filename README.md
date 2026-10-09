@@ -38,9 +38,9 @@ Azure Functions (Node.js v4 programming model) backend service backed by Azure C
   ```bash
   npm install -g azure-functions-core-tools@4 --unsafe-perm true
   ```
-- **Azure Cosmos DB:**
-  - Option A: Local [Azure Cosmos DB Emulator](https://learn.microsoft.com/en-us/azure/cosmos-db/local-emulator)
-  - Option B: A live Azure Cosmos DB instance connection string
+- **Cosmos DB (choose one):**
+  - **Option A (Local Emulator):** Docker / Docker Desktop installed and running.
+  - **Option B (Cloud Instance):** An active Azure Cosmos DB account connection string.
 
 ---
 
@@ -56,19 +56,34 @@ Azure Functions (Node.js v4 programming model) backend service backed by Azure C
    ```bash
    cp local.settings.json.example local.settings.json
    ```
-   Open `local.settings.json` and verify or set your Cosmos DB connection string in `COSMOS_DB_CONNECTION_STRING`.
+   The template includes `AZURE_FUNCTIONS_ENVIRONMENT: "Development"`, which instructs the Functions runtime to accept the local Cosmos DB emulator's self-signed TLS certificate during local development.
 
-3. **Build TypeScript source:**
+3. **Start & initialize local Cosmos DB:**
+   - **If using the local emulator with Docker:**
+     1. Start the emulator container:
+        ```bash
+        ./setup-emulator.sh
+        ```
+        *(This runs the `mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator` container and waits until the endpoint at `https://localhost:8081` is healthy).*
+     2. Initialize the database and containers:
+        ```bash
+        npm run init-db
+        ```
+        *(Creates the `TaskApp` database along with `Tasks` and `FormSettings` containers partitioned by `/organizationId`).*
+   - **If using a live Azure Cosmos DB instance:**
+     Update `COSMOS_DB_CONNECTION_STRING` in `local.settings.json` with your primary connection string, then run `npm run init-db` to provision the database and containers if they do not yet exist.
+
+4. **Build TypeScript source:**
    ```bash
    npm run build
    ```
 
-4. **Run unit tests:**
+5. **Run unit tests:**
    ```bash
    npm test
    ```
 
-5. **Start local Azure Functions host:**
+6. **Start local Azure Functions host:**
    ```bash
    npm start
    ```
@@ -84,6 +99,7 @@ Settings are managed via `local.settings.json` (for local development) and Azure
 |---|---|---|
 | `AzureWebJobsStorage` | WebJobs storage connection string | `UseDevelopmentStorage=true` |
 | `FUNCTIONS_WORKER_RUNTIME` | Functions worker runtime | `node` |
+| `AZURE_FUNCTIONS_ENVIRONMENT` | Functions environment (`Development` trusts local emulator TLS) | `Development` |
 | `COSMOS_DB_CONNECTION_STRING` | Primary Azure Cosmos DB connection string | `AccountEndpoint=...` |
 | `COSMOS_DB_DATABASE_NAME` | Cosmos DB database name | `TaskApp` |
 | `COSMOS_DB_CONTAINER_NAME` | Tasks container name | `Tasks` |
@@ -100,11 +116,11 @@ Settings are managed via `local.settings.json` (for local development) and Azure
 | `npm run watch` | `tsc -w` | Compiles in watch mode |
 | `npm run clean` | `rimraf dist` | Removes build output directory |
 | `npm run prestart` | `npm run clean && npm run build` | Cleans and compiles before starting |
-| `npm start` | `func start` | Starts local Azure Functions host on port `7071` |
+| `npm start` | `NODE_TLS_REJECT_UNAUTHORIZED=0 func start` | Starts local Azure Functions host on port `7071` |
+| `npm run init-db` | `node init-db.js` | Initializes `TaskApp` database and containers in Cosmos DB |
 | `npm test` | `vitest run` | Runs the test suite |
 | `npm run test:watch` | `vitest` | Runs the test suite in interactive watch mode |
 | `npm run lint` | `tsc --noEmit` | Validates TypeScript typing without emitting code |
-
 ---
 
 ## API Reference
