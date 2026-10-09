@@ -4,33 +4,23 @@ export function createMockRequest(options: {
   url?: string;
   method?: string;
   query?: Record<string, string>;
+  queryString?: string;
   body?: unknown;
 }): HttpRequest {
-  const queryMap = new Map<string, string>();
+  const query = new URLSearchParams(options.queryString ?? '');
   if (options.query) {
     for (const [k, v] of Object.entries(options.query)) {
-      queryMap.set(k, v);
+      query.set(k, v);
     }
   }
 
-  const queryParams = new URLSearchParams();
-  for (const [k, v] of queryMap.entries()) {
-    queryParams.set(k, v);
-  }
-  const queryString = queryParams.toString();
-  const url = options.url || `http://localhost:7071/api/test${queryString ? `?${queryString}` : ''}`;
+  const serialized = query.toString();
+  const url = options.url || `http://localhost:7071/api/test${serialized ? `?${serialized}` : ''}`;
 
   return {
     url,
     method: options.method || 'GET',
-    query: {
-      get: (key: string) => queryMap.get(key) ?? null,
-      has: (key: string) => queryMap.has(key),
-      keys: () => queryMap.keys(),
-      values: () => queryMap.values(),
-      entries: () => queryMap.entries(),
-      [Symbol.iterator]: () => queryMap.entries(),
-    },
+    query,
     json: async () => {
       if (options.body === undefined) {
         throw new SyntaxError('Unexpected end of JSON input');

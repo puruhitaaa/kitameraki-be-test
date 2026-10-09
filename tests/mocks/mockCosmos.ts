@@ -22,25 +22,66 @@ export class MockCosmosContainer {
 
   public get items() {
     return {
-      query: (querySpec: SqlQuerySpec | string) => {
-        let orgIdParam: string | undefined;
-
+      query: <T = StoredDocument>(querySpec: SqlQuerySpec | string) => {
+        let sql = typeof querySpec === 'string' ? querySpec : querySpec.query;
+        const params: Record<string, unknown> = {};
         if (typeof querySpec === 'object' && querySpec.parameters) {
-          const match = querySpec.parameters.find(
-            (p) => p.name === '@organizationId',
-          );
-          if (match) {
-            orgIdParam = String(match.value);
+          for (const p of querySpec.parameters) {
+            params[p.name] = p.value;
           }
         }
 
         return {
           fetchAll: async () => {
-            const all = Array.from(this.itemsMap.values());
-            const filtered = orgIdParam
-              ? all.filter((doc) => doc.organizationId === orgIdParam)
-              : all;
-            return { resources: structuredClone(filtered) };
+            let list = Array.from(this.itemsMap.values());
+            const orgId = params['@organizationId'] as string | undefined;
+            if (orgId !== undefined) {
+              list = list.filter((doc) => doc.organizationId === orgId);
+            }
+
+            const search = params['@search'] as string | undefined;
+            if (search) {
+              const sLower = search.toLowerCase();
+              list = list.filter((doc) => {
+                const titleMatch = typeof doc.title === 'string' && doc.title.toLowerCase().includes(sLower);
+                const descMatch = typeof doc.description === 'string' && doc.description.toLowerCase().includes(sLower);
+                const tagsMatch = Array.isArray(doc.tags) && doc.tags.some((t: unknown) => String(t) === search);
+                return titleMatch || descMatch || tagsMatch;
+              });
+            }
+
+            const statuses = params['@statuses'] as string[] | undefined;
+            if (statuses && statuses.length > 0) {
+              list = list.filter((doc) => statuses.includes(String(doc.status)));
+            }
+
+            const priorities = params['@priorities'] as string[] | undefined;
+            if (priorities && priorities.length > 0) {
+              list = list.filter((doc) => priorities.includes(String(doc.priority)));
+            }
+
+            if (sql.includes('SELECT VALUE COUNT(1)')) {
+              return { resources: [list.length] as unknown as T[] };
+            }
+
+            const orderMatch = sql.match(/ORDER BY c\.(\w+)\s+(ASC|DESC)/i);
+            if (orderMatch) {
+              const [, field, direction] = orderMatch;
+              const isDesc = direction.toUpperCase() === 'DESC';
+              list.sort((a, b) => {
+                const valA = a[field] ?? '';
+                const valB = b[field] ?? '';
+                if (valA < valB) return isDesc ? 1 : -1;
+                if (valA > valB) return isDesc ? -1 : 1;
+                return 0;
+              });
+            }
+
+            const offset = typeof params['@offset'] === 'number' ? params['@offset'] : 0;
+            const limit = typeof params['@limit'] === 'number' ? params['@limit'] : list.length;
+            const paginated = list.slice(offset, offset + limit);
+
+            return { resources: structuredClone(paginated) as unknown as T[] };
           },
         };
       },

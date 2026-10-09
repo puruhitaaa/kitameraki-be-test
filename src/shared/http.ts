@@ -40,6 +40,15 @@ export function internalServerError(error: unknown, context?: InvocationContext)
     },
   };
 }
+export function parseQueryParams(request: HttpRequest): Record<string, string> {
+  const params: Record<string, string> = Object.create(null);
+  for (const [key, value] of request.query.entries()) {
+    const existing = params[key];
+    params[key] = existing === undefined ? value : `${existing},${value}`;
+  }
+  return params;
+}
+
 
 export function requireQueryParam(request: HttpRequest, name: string): string {
   const value = request.query.get(name)?.trim();

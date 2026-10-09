@@ -1,6 +1,8 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
+import { GetTasksQuerySchema, PaginatedTasksResult } from '../models/taskQuery';
 import { getTasksContainer } from '../shared/cosmosClient';
-import { badRequest, internalServerError, ok, QueryParamError, requireQueryParam } from '../shared/http';
+import { badRequest, internalServerError, ok, parseQueryParams } from '../shared/http';
+import { buildTaskQueries } from '../shared/taskQueryBuilder';
 
 export async function GetTasks(
   request: HttpRequest,
@@ -8,25 +10,47 @@ export async function GetTasks(
 ): Promise<HttpResponseInit> {
   context.log(`Processing GetTasks request for url "${request.url}"`);
 
-  let organizationId: string;
-  try {
-    organizationId = requireQueryParam(request, 'organizationId');
-  } catch (error) {
-    if (error instanceof QueryParamError) {
-      return badRequest(error.message);
-    }
-    return badRequest('Invalid query parameter');
+  const rawParams = parseQueryParams(request);
+  const parseResult = GetTasksQuerySchema.safeParse(rawParams);
+
+  if (!parseResult.success) {
+    const issue = parseResult.error.issues[0];
+    return badRequest(issue?.message ?? 'Invalid query parameters');
   }
+
+  const query = parseResult.data;
+
+  const filtersActive =
+    (query.search?.trim().length ?? 0) > 0 ||
+    (query.status?.length ?? 0) > 0 ||
+    (query.priority?.length ?? 0) > 0;
 
   try {
     const container = getTasksContainer();
-    const querySpec = {
-      query: 'SELECT * FROM c WHERE c.organizationId = @organizationId',
-      parameters: [{ name: '@organizationId', value: organizationId }],
+    const { totalCountQuery, filteredCountQuery, itemsQuery } = buildTaskQueries(query, filtersActive);
+    const feedOptions = { partitionKey: query.organizationId };
+
+    const [totalCountResponse, filteredCountResponse, itemsResponse] = await Promise.all([
+      totalCountQuery ? container.items.query<number>(totalCountQuery, feedOptions).fetchAll() : null,
+      container.items.query<number>(filteredCountQuery, feedOptions).fetchAll(),
+      container.items.query(itemsQuery, feedOptions).fetchAll(),
+    ]);
+
+    const filteredCount = Number(filteredCountResponse.resources[0] ?? 0);
+    const totalCount = totalCountResponse ? Number(totalCountResponse.resources[0] ?? 0) : filteredCount;
+    const items = itemsResponse.resources;
+    const totalPages = Math.ceil(filteredCount / query.pageSize);
+
+    const result: PaginatedTasksResult = {
+      items,
+      totalCount,
+      filteredCount,
+      page: query.page,
+      pageSize: query.pageSize,
+      totalPages,
     };
 
-    const { resources } = await container.items.query(querySpec).fetchAll();
-    return ok(resources);
+    return ok(result);
   } catch (error) {
     return internalServerError(error, context);
   }

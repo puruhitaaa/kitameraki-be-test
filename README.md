@@ -137,24 +137,39 @@ All requests require the tenant partition identifier (`organizationId`).
 ### Task Endpoints
 
 #### 1. `GET /api/GetTasks`
-Retrieves all tasks for the specified organization.
+Retrieves a page of tasks for the specified organization, with optional full-text search, status/priority filtering and sorting.
 - **Query Parameters:**
-  - `organizationId` (string, required): Organization UUID.
+  - `organizationId` (string, required, max 100 chars): Organization UUID. Surrounding whitespace is trimmed.
+  - `search` (string, optional, max 100 chars): Case-insensitive match against task title, description, or tags.
+  - `status` (string, optional): Comma-separated list of statuses (e.g. `todo,in-progress`). Repeatable.
+  - `priority` (string, optional): Comma-separated list of priorities (e.g. `high,low`). Repeatable.
+  - `sortColumn` (string, optional, default `title`): One of `title`, `priority`, `status`, `dueDate`.
+  - `sortDirection` (string, optional, default `asc`): One of `asc`, `desc`, `ascending`, `descending`.
+  - `page` (integer, optional, default `0`, max `10000`): Zero-based page index.
+  - `pageSize` (integer, optional, default `10`, max `100`): Items per page.
 - **Response:** `200 OK`
   ```json
-  [
-    {
-      "id": "e2a0b12e-...",
-      "organizationId": "11111111-...",
-      "title": "Invoice Customer",
-      "description": "Send monthly invoice",
-      "status": "todo",
-      "priority": "high",
-      "dueDate": "2026-11-20T14:30:00.000Z",
-      "tags": ["finance"]
-    }
-  ]
+  {
+    "items": [
+      {
+        "id": "e2a0b12e-...",
+        "organizationId": "11111111-...",
+        "title": "Invoice Customer",
+        "description": "Send monthly invoice",
+        "status": "todo",
+        "priority": "high",
+        "dueDate": "2026-11-20T14:30:00.000Z",
+        "tags": ["finance"]
+      }
+    ],
+    "totalCount": 42,
+    "filteredCount": 7,
+    "page": 0,
+    "pageSize": 10,
+    "totalPages": 1
+  }
   ```
+  `totalCount` is the organization's unfiltered task count; `filteredCount` is the count after `search`/`status`/`priority` are applied. `totalPages` is `0` when `filteredCount` is `0`.
 
 #### 2. `GET /api/GetTask`
 Retrieves a single task by ID and organization.
@@ -286,11 +301,18 @@ Saves or updates customizable form field settings.
 7. **TypeScript Strict Mode:**
    - Upgraded `tsconfig.json` to `"strict": true`, targeting modern `ES2022`, eliminating untyped references and runtime assumptions.
 
+8. **Paginated Query Hardening (`GetTasks.ts`, `taskQueryBuilder.ts`, `http.ts`):**
+   - Partition-scoped execution: every Cosmos DB query now passes `{ partitionKey: organizationId }` as `FeedOptions`, routing to a single logical partition instead of fanning out across the container.
+   - Bounded inputs: `organizationId` is trimmed and capped at 100 characters; `page` is capped at `10000`, keeping the `OFFSET`/`LIMIT` window inside the engine's numeric range.
+   - Repeated query keys are joined instead of dropped, so `?status=todo&status=in-progress` keeps both filters while a repeated scalar (e.g. `?page=1&page=2`) fails closed with `400`.
+   - The redundant `totalCount` query is skipped when no filter is active (2 queries instead of 3), and `totalPages` is `Math.ceil(filteredCount / pageSize)` — `0` for an empty result set.
+   - Sort columns are resolved through a frozen null-prototype map, so prototype keys cannot select an arbitrary `ORDER BY` expression.
+
 ---
 
 ## Automated Testing
 
-The project includes 28 unit tests powered by Vitest, verifying all endpoints with in-memory Cosmos DB container mocks:
+The project includes 48 unit tests powered by Vitest, verifying all endpoints with in-memory Cosmos DB container mocks:
 
 ```bash
 npm test
