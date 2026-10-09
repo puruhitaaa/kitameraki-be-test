@@ -73,6 +73,12 @@ Azure Functions (Node.js v4 programming model) backend service backed by Azure C
    - **If using a live Azure Cosmos DB instance:**
      Update `COSMOS_DB_CONNECTION_STRING` in `local.settings.json` with your primary connection string, then run `npm run init-db` to provision the database and containers if they do not yet exist.
 
+   - **Seed development data (Optional):**
+     ```bash
+     npm run seed
+     ```
+     *(Populates 100 realistic sample tasks for the default organization `11111111-1111-4111-8111-111111111111`. Supports `--count=<number>` and `--clean` flags).*
+
 4. **Build TypeScript source:**
    ```bash
    npm run build
@@ -118,6 +124,7 @@ Settings are managed via `local.settings.json` (for local development) and Azure
 | `npm run prestart` | `npm run clean && npm run build` | Cleans and compiles before starting |
 | `npm start` | `NODE_TLS_REJECT_UNAUTHORIZED=0 func start` | Starts local Azure Functions host on port `7071` |
 | `npm run init-db` | `node init-db.js` | Initializes `TaskApp` database and containers in Cosmos DB |
+| `npm run seed` | `node seed-tasks.js` | Seeds sample tasks for development (`--count=N`, `--clean`) |
 | `npm test` | `vitest run` | Runs the test suite |
 | `npm run test:watch` | `vitest` | Runs the test suite in interactive watch mode |
 | `npm run lint` | `tsc --noEmit` | Validates TypeScript typing without emitting code |

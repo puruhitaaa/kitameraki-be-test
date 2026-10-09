@@ -9,6 +9,7 @@
     "prestart": "npm run clean && npm run build",
     "start": "NODE_TLS_REJECT_UNAUTHORIZED=0 func start",
     "init-db": "node init-db.js",
+    "seed": "node seed-tasks.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit"
