@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { UpdateTask } from '../../src/functions/UpdateTask';
+import { escapeJsonPointer, UpdateTask } from '../../src/functions/UpdateTask';
 import { setCosmosClient } from '../../src/shared/cosmosClient';
 import { createMockCosmosClient, MockCosmosContainer } from '../mocks/mockCosmos';
 import { createMockContext, createMockRequest } from '../mocks/mockHelpers';
@@ -108,6 +108,52 @@ describe('UpdateTask', () => {
     expect(res.status).toBe(404);
     expect(res.jsonBody).toMatchObject({
       error: "Task with ID 'missing-id' was not found",
+    });
+  });
+
+  it('rejects prototype pollution keys with 400 Bad Request', async () => {
+    const cases = [
+      JSON.parse('{"__proto__": {"polluted": true}}'),
+      { constructor: 'polluted' },
+      { prototype: 'polluted' },
+    ];
+
+    for (const body of cases) {
+      const req = createMockRequest({
+        method: 'POST',
+        query: { id: 'task-u1', organizationId: 'org-u' },
+        body,
+      });
+
+      const res = await UpdateTask(req, createMockContext());
+      expect(res.status).toBe(400);
+      expect(res.jsonBody).toMatchObject({
+        error: 'Validation failed',
+      });
+    }
+  });
+
+  it('escapes JSON pointer characters per RFC 6901 without corrupting patch paths', async () => {
+    expect(escapeJsonPointer('title')).toBe('/title');
+    expect(escapeJsonPointer('custom/field')).toBe('/custom~1field');
+    expect(escapeJsonPointer('custom~field')).toBe('/custom~0field');
+    expect(escapeJsonPointer('a/b~c/d')).toBe('/a~1b~0c~1d');
+
+    const req = createMockRequest({
+      method: 'POST',
+      query: { id: 'task-u1', organizationId: 'org-u' },
+      body: {
+        'custom/field': 'escaped-slash',
+        'custom~field': 'escaped-tilde',
+      },
+    });
+
+    const res = await UpdateTask(req, createMockContext());
+    expect(res.status).toBe(200);
+    expect(res.jsonBody).toMatchObject({
+      id: 'task-u1',
+      'custom/field': 'escaped-slash',
+      'custom~field': 'escaped-tilde',
     });
   });
 });

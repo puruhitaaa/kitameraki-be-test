@@ -79,7 +79,10 @@ export class MockCosmosContainer {
         const updated = structuredClone(found);
         for (const op of operations) {
           if (op.op === 'set') {
-            const cleanKey = op.path.replace(/^\//, '');
+            const cleanKey = op.path
+              .replace(/^\//, '')
+              .replace(/~1/g, '/')
+              .replace(/~0/g, '~');
             updated[cleanKey] = op.value;
           }
         }

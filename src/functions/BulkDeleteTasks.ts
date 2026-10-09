@@ -1,6 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { BulkDeleteSchema } from '../models/task';
-import { getTasksContainer } from '../shared/cosmosClient';
+import { getTasksContainer, isCosmosNotFound } from '../shared/cosmosClient';
 import {
   badRequest,
   internalServerError,
@@ -52,9 +52,13 @@ export async function BulkDeleteTasks(
       if (result.status === 'fulfilled') {
         deletedCount += 1;
       } else {
-        const reason =
-          result.reason instanceof Error ? result.reason.message : 'Unknown delete error';
-        failures.push({ id: taskIds[index], reason });
+        const err = result.reason;
+        if (isCosmosNotFound(err)) {
+          failures.push({ id: taskIds[index], reason: 'Task not found' });
+        } else {
+          context.error(`Failed to delete task '${taskIds[index]}':`, err);
+          failures.push({ id: taskIds[index], reason: 'Failed to delete task' });
+        }
       }
     });
 

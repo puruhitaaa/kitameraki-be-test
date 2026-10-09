@@ -104,4 +104,147 @@ describe('FormSettings', () => {
     expect(res.status).toBe(400);
     expect(res.jsonBody).toMatchObject({ error: 'Validation failed' });
   });
+
+  it('rejects custom fields that collide with reserved task attributes (400 Bad Request)', async () => {
+    const reservedCollisions = ['id', 'title', 'status', 'organizationId', 'dueDate', '_ts'];
+    for (const reservedName of reservedCollisions) {
+      const payload = {
+        organizationId: 'org-reserved',
+        fields: [
+          {
+            id: `f-${reservedName}`,
+            name: reservedName,
+            label: `Label for ${reservedName}`,
+            type: 'text',
+            row: 0,
+            column: 0,
+          },
+        ],
+      };
+
+      const req = createMockRequest({
+        method: 'POST',
+        body: payload,
+      });
+
+      const res = await SaveFormSettings(req, createMockContext());
+      expect(res.status).toBe(400);
+      expect(res.jsonBody).toMatchObject({ error: 'Validation failed' });
+    }
+  });
+
+  it('rejects duplicate field names and duplicate field IDs (400 Bad Request)', async () => {
+    // Duplicate field names
+    const duplicateNamePayload = {
+      organizationId: 'org-dup',
+      fields: [
+        {
+          id: 'field-1',
+          name: 'notes',
+          label: 'Notes 1',
+          type: 'text',
+          row: 0,
+          column: 0,
+        },
+        {
+          id: 'field-2',
+          name: 'notes',
+          label: 'Notes 2',
+          type: 'text',
+          row: 1,
+          column: 0,
+        },
+      ],
+    };
+
+    const req1 = createMockRequest({
+      method: 'POST',
+      body: duplicateNamePayload,
+    });
+    const res1 = await SaveFormSettings(req1, createMockContext());
+    expect(res1.status).toBe(400);
+    expect(res1.jsonBody).toMatchObject({ error: 'Validation failed' });
+
+    // Duplicate field IDs
+    const duplicateIdPayload = {
+      organizationId: 'org-dup',
+      fields: [
+        {
+          id: 'field-same',
+          name: 'fieldOne',
+          label: 'Field One',
+          type: 'text',
+          row: 0,
+          column: 0,
+        },
+        {
+          id: 'field-same',
+          name: 'fieldTwo',
+          label: 'Field Two',
+          type: 'text',
+          row: 1,
+          column: 0,
+        },
+      ],
+    };
+
+    const req2 = createMockRequest({
+      method: 'POST',
+      body: duplicateIdPayload,
+    });
+    const res2 = await SaveFormSettings(req2, createMockContext());
+    expect(res2.status).toBe(400);
+    expect(res2.jsonBody).toMatchObject({ error: 'Validation failed' });
+  });
+
+  it('rejects malformed field names (400 Bad Request)', async () => {
+    const malformedNames = ['123numericStart', 'has space', 'special-char', 'dollar$ign', ''];
+    for (const badName of malformedNames) {
+      const payload = {
+        organizationId: 'org-malformed',
+        fields: [
+          {
+            id: 'f-1',
+            name: badName,
+            label: 'Label',
+            type: 'text',
+            row: 0,
+            column: 0,
+          },
+        ],
+      };
+
+      const req = createMockRequest({
+        method: 'POST',
+        body: payload,
+      });
+
+      const res = await SaveFormSettings(req, createMockContext());
+      expect(res.status).toBe(400);
+      expect(res.jsonBody).toMatchObject({ error: 'Validation failed' });
+    }
+  });
+
+  it('rejects more than 50 custom fields (400 Bad Request)', async () => {
+    const payload = {
+      organizationId: 'org-limit',
+      fields: Array.from({ length: 51 }, (_, i) => ({
+        id: `f-${i}`,
+        name: `customField_${i}`,
+        label: `Custom Field ${i}`,
+        type: 'text',
+        row: i,
+        column: 0 as const,
+      })),
+    };
+
+    const req = createMockRequest({
+      method: 'POST',
+      body: payload,
+    });
+
+    const res = await SaveFormSettings(req, createMockContext());
+    expect(res.status).toBe(400);
+    expect(res.jsonBody).toMatchObject({ error: 'Validation failed' });
+  });
 });

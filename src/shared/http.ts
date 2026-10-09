@@ -27,7 +27,6 @@ export function notFound(message = 'Resource not found'): HttpResponseInit {
 }
 
 export function internalServerError(error: unknown, context?: InvocationContext): HttpResponseInit {
-  const message = error instanceof Error ? error.message : 'Unknown internal error';
   if (context) {
     context.error('Internal server error:', error);
   } else {
@@ -35,7 +34,10 @@ export function internalServerError(error: unknown, context?: InvocationContext)
   }
   return {
     status: 500,
-    jsonBody: { error: 'Internal server error', message },
+    jsonBody: {
+      error: 'Internal server error',
+      message: 'An unexpected error occurred while processing the request.',
+    },
   };
 }
 
