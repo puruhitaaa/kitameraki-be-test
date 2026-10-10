@@ -56,7 +56,7 @@ Azure Functions (Node.js v4 programming model) backend service backed by Azure C
    ```bash
    cp local.settings.json.example local.settings.json
    ```
-   The template includes `AZURE_FUNCTIONS_ENVIRONMENT: "Development"`, which instructs the Functions runtime to accept the local Cosmos DB emulator's self-signed TLS certificate during local development.
+   The template includes `AZURE_FUNCTIONS_ENVIRONMENT: "Development"`, which instructs the Functions runtime to accept the local Cosmos DB emulator's self-signed TLS certificate.
 
 3. **Start & initialize local Cosmos DB:**
    - **If using the local emulator with Docker:**
@@ -77,7 +77,7 @@ Azure Functions (Node.js v4 programming model) backend service backed by Azure C
      ```bash
      npm run seed
      ```
-     *(Populates 100 realistic sample tasks for the default organization `11111111-1111-4111-8111-111111111111`. Supports `--count=<number>` and `--clean` flags).*
+     *(Populates 100 sample tasks for the default organization `11111111-1111-4111-8111-111111111111`. Supports `--count=<number>` and `--clean` flags).*
 
 4. **Build TypeScript source:**
    ```bash
@@ -139,7 +139,7 @@ All requests require the tenant partition identifier (`organizationId`).
 ### Task Endpoints
 
 #### 1. `GET /api/GetTasks`
-Retrieves a page of tasks for the specified organization, with optional full-text search, status/priority filtering and sorting.
+Retrieves a page of tasks for the specified organization, with optional search, status/priority filtering and sorting.
 - **Query Parameters:**
   - `organizationId` (string, required, max 100 chars): Organization UUID. Surrounding whitespace is trimmed.
   - `search` (string, optional, max 100 chars): Case-insensitive match against task title, description, or tags.
@@ -195,7 +195,7 @@ Creates a new task.
     "tags": ["demo", "sprint"]
   }
   ```
-  *(If `id` is omitted, a UUID v4 is automatically generated)*
+  *(The server generates `id`; any client-supplied `id` is ignored.)*
 - **Response:** `201 Created` with created task object.
 
 #### 4. `POST /api/UpdateTask`
@@ -293,17 +293,17 @@ Saves or updates customizable form field settings.
    - Integrated Zod runtime validation enforcing property types, max lengths, enums, and required fields according to `task.schema.json`.
    - Blocked destructive patches targeting partition keys (`/organizationId`), primary keys (`/id`), and Cosmos DB internal metadata (`/_rid`, `/_self`, `/_etag`).
 
-5. **Cosmos DB Resilient Patching:**
-   - Switched patch operations from `"replace"` to `"set"`, preventing runtime crashes when patching optional or newly introduced custom form fields that may not exist on older documents.
+5. **Patch `set` Operations (`UpdateTask.ts`):**
+   - Switched patch operations from `"replace"` to `"set"`, preventing runtime crashes when patching optional or configured custom fields that may not exist on older documents.
 
 6. **Standardized HTTP Responses & Error Handling (`src/shared/http.ts`):**
-   - Standardized status codes: `200 OK`, `201 Created`, `400 Bad Request`, `404 Not Found`, and `500 Internal Server Error`.
+   - Uses `200 OK`, `201 Created`, `400 Bad Request`, `404 Not Found`, and `500 Internal Server Error`.
    - Handled Cosmos DB 404 errors gracefully instead of crashing with unhandled 500s.
 
 7. **TypeScript Strict Mode:**
-   - Upgraded `tsconfig.json` to `"strict": true`, targeting modern `ES2022`, eliminating untyped references and runtime assumptions.
+   - Upgraded `tsconfig.json` to `"strict": true`, targeting `ES2022`.
 
-8. **Paginated Query Hardening (`GetTasks.ts`, `taskQueryBuilder.ts`, `http.ts`):**
+8. **Paginated Query Bounds (`GetTasks.ts`, `taskQueryBuilder.ts`, `http.ts`):**
    - Partition-scoped execution: every Cosmos DB query now passes `{ partitionKey: organizationId }` as `FeedOptions`, routing to a single logical partition instead of fanning out across the container.
    - Bounded inputs: `organizationId` is trimmed and capped at 100 characters; `page` is capped at `10000`, keeping the `OFFSET`/`LIMIT` window inside the engine's numeric range.
    - Repeated query keys are joined instead of dropped, so `?status=todo&status=in-progress` keeps both filters while a repeated scalar (e.g. `?page=1&page=2`) fails closed with `400`.
@@ -314,7 +314,7 @@ Saves or updates customizable form field settings.
 
 ## Automated Testing
 
-The project includes 48 unit tests powered by Vitest, verifying all endpoints with in-memory Cosmos DB container mocks:
+The project includes 57 unit tests powered by Vitest, verifying all endpoints with in-memory Cosmos DB container mocks:
 
 ```bash
 npm test
