@@ -6,10 +6,12 @@ import { createMockContext, createMockRequest } from '../mocks/mockHelpers';
 
 describe('UpdateTask', () => {
   let tasksContainer: MockCosmosContainer;
+  let formSettingsContainer: MockCosmosContainer;
 
   beforeEach(() => {
     const mock = createMockCosmosClient();
     tasksContainer = mock.tasksContainer;
+    formSettingsContainer = mock.formSettingsContainer;
     setCosmosClient(mock.mockClient);
 
     tasksContainer.seed([
@@ -139,12 +141,33 @@ describe('UpdateTask', () => {
     expect(escapeJsonPointer('custom~field')).toBe('/custom~0field');
     expect(escapeJsonPointer('a/b~c/d')).toBe('/a~1b~0c~1d');
 
+    // NOTE: `/` and `~` can no longer appear in custom field names (FIELD_NAME_REGEX
+    // forbids them), so only regex-safe names can be patched over HTTP. The RFC-6901
+    // escaping above remains as pure unit coverage.
+    formSettingsContainer.seed([
+      {
+        id: 'default',
+        organizationId: 'org-u',
+        fields: [
+          {
+            id: 'f1',
+            name: 'customNote',
+            label: 'Custom Note',
+            type: 'text',
+            row: 0,
+            column: 0,
+            required: false,
+          },
+        ],
+      },
+    ]);
+
     const req = createMockRequest({
       method: 'POST',
       query: { id: 'task-u1', organizationId: 'org-u' },
       body: {
-        'custom/field': 'escaped-slash',
-        'custom~field': 'escaped-tilde',
+        customNote: 'hello',
+        title: 'T2',
       },
     });
 
@@ -152,8 +175,94 @@ describe('UpdateTask', () => {
     expect(res.status).toBe(200);
     expect(res.jsonBody).toMatchObject({
       id: 'task-u1',
-      'custom/field': 'escaped-slash',
-      'custom~field': 'escaped-tilde',
+      customNote: 'hello',
+      title: 'T2',
     });
+  });
+
+  it('rejects invalid known-field values with 400', async () => {
+    for (const body of [{ status: 'not-a-valid-status' }, { title: 123 }]) {
+      const req = createMockRequest({
+        method: 'POST',
+        query: { id: 'task-u1', organizationId: 'org-u' },
+        body,
+      });
+
+      const res = await UpdateTask(req, createMockContext());
+      expect(res.status).toBe(400);
+      expect(res.jsonBody).toMatchObject({
+        error: 'Validation failed',
+      });
+    }
+  });
+
+  it('rejects unconfigured custom fields with 400', async () => {
+    const req = createMockRequest({
+      method: 'POST',
+      query: { id: 'task-u1', organizationId: 'org-u' },
+      body: { unknownField: 'x' },
+    });
+
+    const res = await UpdateTask(req, createMockContext());
+    expect(res.status).toBe(400);
+    expect(res.jsonBody).toMatchObject({
+      error: 'Validation failed',
+    });
+  });
+
+  it('silently drops createdAt/updatedAt overwrites while applying allowed fields', async () => {
+    // createdAt is a reserved name and can never be a configured custom field,
+    // so the patch allowlist drops it instead of rejecting the request.
+    const req = createMockRequest({
+      method: 'POST',
+      query: { id: 'task-u1', organizationId: 'org-u' },
+      body: { title: 'X', createdAt: '2000-01-01T00:00:00.000Z' },
+    });
+
+    const res = await UpdateTask(req, createMockContext());
+    expect(res.status).toBe(200);
+    expect(res.jsonBody).toMatchObject({ id: 'task-u1', title: 'X' });
+
+    const persisted = tasksContainer.itemsMap.get('org-u:task-u1')!;
+    expect(persisted.title).toBe('X');
+    expect(persisted).not.toHaveProperty('createdAt');
+  });
+
+  it('validates custom field value types against form settings', async () => {
+    formSettingsContainer.seed([
+      {
+        id: 'default',
+        organizationId: 'org-u',
+        fields: [
+          {
+            id: 'f1',
+            name: 'followUp',
+            label: 'Follow Up',
+            type: 'datetime',
+            row: 0,
+            column: 0,
+            required: false,
+          },
+        ],
+      },
+    ]);
+
+    const badReq = createMockRequest({
+      method: 'POST',
+      query: { id: 'task-u1', organizationId: 'org-u' },
+      body: { followUp: 'not-a-date' },
+    });
+    const badRes = await UpdateTask(badReq, createMockContext());
+    expect(badRes.status).toBe(400);
+    expect(badRes.jsonBody).toMatchObject({ error: 'Validation failed' });
+
+    const goodReq = createMockRequest({
+      method: 'POST',
+      query: { id: 'task-u1', organizationId: 'org-u' },
+      body: { followUp: '2026-01-01T00:00:00.000Z' },
+    });
+    const goodRes = await UpdateTask(goodReq, createMockContext());
+    expect(goodRes.status).toBe(200);
+    expect(goodRes.jsonBody).toMatchObject({ followUp: '2026-01-01T00:00:00.000Z' });
   });
 });

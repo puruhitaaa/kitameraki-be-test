@@ -1,4 +1,8 @@
 import { Container, CosmosClient } from '@azure/cosmos';
+import {
+  createDefaultFormSettings,
+  type FormSettings,
+} from '../models/formSettings';
 
 let cachedClient: CosmosClient | null = null;
 
@@ -76,4 +80,16 @@ export function isCosmosNotFound(error: unknown): boolean {
     return code === 404 || statusCode === 404;
   }
   return false;
+}
+
+export async function getFormSettingsByOrg(organizationId: string): Promise<FormSettings> {
+  try {
+    const { resource } = await getFormSettingsContainer()
+      .item('default', organizationId)
+      .read<FormSettings>();
+    return resource ?? createDefaultFormSettings(organizationId);
+  } catch (error) {
+    if (isCosmosNotFound(error)) return createDefaultFormSettings(organizationId);
+    throw error;
+  }
 }

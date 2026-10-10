@@ -26,7 +26,7 @@ export const InsertTaskSchema = TaskSchema.extend({
   id: z.string().optional(),
 }).transform((data) => ({
   ...data,
-  id: data.id && data.id.trim().length > 0 ? data.id : randomUUID(),
+  id: randomUUID(), // always server-generated; client-supplied ids are ignored
 }));
 
 export type InsertTaskInput = z.input<typeof InsertTaskSchema>;
@@ -45,7 +45,15 @@ export const FORBIDDEN_PATCH_KEYS: Record<string, boolean> = {
 };
 
 export const UpdateTaskSchema = z
-  .record(z.unknown())
+  .object({
+    title: z.string().min(1).max(100).optional(),
+    description: z.string().max(1000).optional().nullable(),
+    dueDate: z.string().datetime().optional().nullable(),
+    priority: TaskPriorityEnum.optional().nullable(),
+    status: TaskStatusEnum.optional(),
+    tags: z.array(z.string().max(50)).optional(),
+  })
+  .passthrough()
   .refine((data) => Object.keys(data).length > 0, {
     message: 'Update payload must contain at least one field to update',
   })

@@ -23,7 +23,7 @@ export async function SaveFormSettings(
 
   const settingsToSave = {
     ...parseResult.data,
-    id: parseResult.data.id || 'default',
+    id: 'default', // singleton doc per org; client-supplied ids are overwritten
     updatedAt: new Date().toISOString(),
   };
 
@@ -38,6 +38,6 @@ export async function SaveFormSettings(
 
 app.http('SaveFormSettings', {
   methods: ['POST'],
-  authLevel: 'anonymous',
+  authLevel: 'function',
   handler: SaveFormSettings,
 });

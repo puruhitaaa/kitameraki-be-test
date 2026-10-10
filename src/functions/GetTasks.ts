@@ -58,6 +58,6 @@ export async function GetTasks(
 
 app.http('GetTasks', {
   methods: ['GET'],
-  authLevel: 'anonymous',
+  authLevel: 'function',
   handler: GetTasks,
 });

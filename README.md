@@ -95,6 +95,8 @@ Azure Functions (Node.js v4 programming model) backend service backed by Azure C
    ```
    Functions will be available at `http://localhost:7071/api/*`.
 
+   > **Authentication:** All endpoints require function-key auth. Pass the key via the `?code=<function-key>` query parameter or the `x-functions-key` header — e.g. `curl "http://localhost:7071/api/GetTasks?organizationId=<org>&code=<function-key>"`. Locally, `func start` prints the auto-generated host key in its startup output; in Azure, use the function or host keys from the portal.
+
 ---
 
 ## Configuration
@@ -122,7 +124,7 @@ Settings are managed via `local.settings.json` (for local development) and Azure
 | `npm run watch` | `tsc -w` | Compiles in watch mode |
 | `npm run clean` | `rimraf dist` | Removes build output directory |
 | `npm run prestart` | `npm run clean && npm run build` | Cleans and compiles before starting |
-| `npm start` | `NODE_TLS_REJECT_UNAUTHORIZED=0 func start` | Starts local Azure Functions host on port `7071` |
+| `npm start` | `func start` | Starts local Azure Functions host on port `7071` |
 | `npm run init-db` | `node init-db.js` | Initializes `TaskApp` database and containers in Cosmos DB |
 | `npm run seed` | `node seed-tasks.js` | Seeds sample tasks for development (`--count=N`, `--clean`) |
 | `npm test` | `vitest run` | Runs the test suite |

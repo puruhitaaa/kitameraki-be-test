@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const FIELD_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_]*$/;
+
 export const FormFieldTypeEnum = z.enum(['text', 'date', 'datetime', 'email']);
 export type FormFieldType = z.infer<typeof FormFieldTypeEnum>;
 
@@ -28,7 +30,7 @@ export const FormFieldSchema = z.object({
     .min(1, 'Field name is required')
     .max(50, 'Field name cannot exceed 50 characters')
     .regex(
-      /^[a-zA-Z][a-zA-Z0-9_]*$/,
+      FIELD_NAME_REGEX,
       'Field name must be a valid identifier (alphanumeric and underscore)',
     )
     .refine((name) => !RESERVED_FIELD_NAMES.has(name), {

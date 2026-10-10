@@ -44,6 +44,6 @@ export async function GetFormSettings(
 
 app.http('GetFormSettings', {
   methods: ['GET'],
-  authLevel: 'anonymous',
+  authLevel: 'function',
   handler: GetFormSettings,
 });

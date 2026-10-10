@@ -80,6 +80,50 @@ describe('FormSettings', () => {
     expect(body.fields[0].name).toBe('clientEmail');
   });
 
+  it('forces id to default regardless of client-supplied id', async () => {
+    const savePayload = {
+      id: 'shadow-1',
+      organizationId: 'org-x',
+      fields: [
+        {
+          id: 'field-1',
+          name: 'clientEmail',
+          label: 'Client Email',
+          type: 'email',
+          row: 0,
+          column: 0,
+          required: false,
+        },
+      ],
+    };
+
+    const saveReq = createMockRequest({
+      method: 'POST',
+      body: savePayload,
+    });
+    const saveRes = await SaveFormSettings(saveReq, createMockContext());
+
+    expect(saveRes.status).toBe(200);
+    expect(saveRes.jsonBody).toMatchObject({ id: 'default', organizationId: 'org-x' });
+
+    // GET for that org reads the singleton doc and returns the saved fields
+    const getReq = createMockRequest({
+      query: { organizationId: 'org-x' },
+    });
+    const getRes = await GetFormSettings(getReq, createMockContext());
+    expect(getRes.status).toBe(200);
+    const body = getRes.jsonBody as { id: string; fields: Array<{ name: string }> };
+    expect(body.id).toBe('default');
+    expect(body.fields).toHaveLength(1);
+    expect(body.fields[0].name).toBe('clientEmail');
+
+    // Only the singleton doc exists for the org (no orphaned shadow doc)
+    const orgKeys = [...formSettingsContainer.itemsMap.keys()].filter((k) =>
+      k.startsWith('org-x:'),
+    );
+    expect(orgKeys).toEqual(['org-x:default']);
+  });
+
   it('rejects invalid field types or invalid columns with 400 Bad Request', async () => {
     const invalidPayload = {
       organizationId: 'org-bad',
